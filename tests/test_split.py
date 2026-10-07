@@ -9,6 +9,9 @@ from core.config import SplitConfig
 from core.step.split import SplitStep
 
 
+OTHER_LINE_ENDINGS = ("\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029")
+
+
 class SplitNewlineTests(unittest.TestCase):
     def make_splitter(self, char_list=None, max_count=5):
         cfg = SplitConfig(
@@ -54,8 +57,48 @@ class SplitNewlineTests(unittest.TestCase):
             ["第一句\n\n第二句"],
         )
 
+    def test_other_line_endings_are_respected_when_configured(self):
+        for separator in OTHER_LINE_ENDINGS:
+            for char_list in ([r"\s"], [separator]):
+                with self.subTest(separator=separator, char_list=char_list):
+                    self.assertEqual(
+                        self.split_text("第一句" + separator + "第二句", char_list=char_list),
+                        ["第一句", "第二句"],
+                    )
+
+    def test_other_line_endings_are_preserved_when_not_configured(self):
+        for separator in OTHER_LINE_ENDINGS:
+            for char_list in (["。", "？"], [r"\n"]):
+                text = "第一句" + separator + "第二句"
+                with self.subTest(separator=separator, char_list=char_list):
+                    self.assertEqual(self.split_text(text, char_list=char_list), [text])
+
+    def test_other_line_endings_do_not_create_empty_tokens(self):
+        for separator in OTHER_LINE_ENDINGS:
+            text = separator * 2 + "第一句" + separator * 2 + "第二句" + separator * 2
+            with self.subTest(separator=separator):
+                splitter = self.make_splitter()
+                tokens = list(splitter.tokenizer.tokenize(text))
+                self.assertTrue(all(token.text.strip() for token in tokens))
+                self.assertEqual(self.split_text(text), ["第一句", "第二句"])
+                tokens = list(splitter.tokenizer.tokenize(separator * 2))
+                self.assertFalse(any(token.is_split for token in tokens))
+
+    def test_other_line_endings_inside_quotes_are_protected(self):
+        for separator in OTHER_LINE_ENDINGS:
+            text = "“第一句" + separator + "第二句”"
+            with self.subTest(separator=separator):
+                self.assertEqual(self.split_text(text), [text])
+                self.assertEqual(self.split_text(text + separator + "第三句"), [text, "第三句"])
+
     def test_horizontal_whitespace_does_not_create_split_points(self):
-        for text in ("hello world", "第一句 第二句", "第一句\t第二句"):
+        for text in (
+            "hello world",
+            "第一句 第二句",
+            "第一句\t第二句",
+            "第一句\u00a0第二句",
+            "第一句\u3000第二句",
+        ):
             with self.subTest(text=text):
                 self.assertEqual(self.split_text(text), [text])
 
