@@ -201,7 +201,8 @@ class TextTokenizer:
             m = self.pattern.match(text, i)
             if m:
                 seg = m.group()
-                if seg.strip() == "":
+                # 配置的换行可以断段，但水平空白和前导空行不应产生切点。
+                if seg.strip() == "" and ("\n" not in seg or not buf.strip()):
                     buf += seg
                     i += len(seg)
                     continue
